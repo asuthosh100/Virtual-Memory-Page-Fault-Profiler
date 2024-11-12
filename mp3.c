@@ -14,7 +14,6 @@
 #include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/jiffies.h>  
-
 #include "mp3_given.h"
 
 // !!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!
@@ -39,13 +38,21 @@ struct pcb {
 	pid_t pid;
 };
 
-
+static struct workqueue_struck *workqueue;
+static void wq_fn(struct work_struct *work); 
+static DECLARE_DELAYED_WORK(work, wq_fn); 
+unsigned long delay; 
+//-----------------------------------------------------------------
 void register_task(char *kbuf);
 void deregister_task(char *kbuf);
-
+//----------------------------------------------------------------
 
 #define DEBUG 1
 //------------------------------------------------------------------
+static void  wq_fn(struct work_struct *work) {
+	return; 
+}
+
 static ssize_t read_handler(struct file *file, char __user *ubuf, size_t count, loff_t *ppos) 
 {
 	printk( KERN_DEBUG "read handler\n");
@@ -54,8 +61,7 @@ static ssize_t read_handler(struct file *file, char __user *ubuf, size_t count, 
 
 static ssize_t write_handler(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) 
 {	
-	
-    char *kbuffer = kmalloc(count + 1, GFP_KERNEL);
+	char *kbuffer = kmalloc(count + 1, GFP_KERNEL);
 	
     if (!kbuffer) {
         return -ENOMEM;
@@ -70,7 +76,6 @@ static ssize_t write_handler(struct file *file, const char __user *ubuf, size_t 
 
     kbuffer[count] = '\0';  // Null-terminate the string
 
-
 	if(kbuffer[0] == 'R') {
 		register_task(kbuffer);
 	}
@@ -79,13 +84,15 @@ static ssize_t write_handler(struct file *file, const char __user *ubuf, size_t 
 		deregister_task(kbuffer);
 	}
 
-    kfree(kbuffer);  // Free the allocated memory
+	kfree(kbuffer);  // Free the allocated memory
     return count;
+
 }
 
-void register_task(char *kbuf) {
+void register_task(char *kbuf) 
+{
+	struct pcb *reg_pcb = kmem_cache_alloc(pcb_slab, GFP_KERNEL); 
 
-    struct pcb *reg_pcb = kmem_cache_alloc(pcb_slab, GFP_KERNEL); 
     if(!reg_pcb) {
         printk(KERN_ERR "Failed to allocate memory for new task\n");
         return;
@@ -97,12 +104,20 @@ void register_task(char *kbuf) {
 
 	printk(KERN_ALERT "reg_pcb_pid : %d\n", reg_pcb->pid); 
 
+	reg_pcb->linux_task = find_task_by_pid(reg_pcb->pid);
+
     mutex_lock(&pcb_list_mutex);
+	// if list empty then 
+	if(list_empty(&pcb_task_list)) {
+		queue_delayed_work(workqueue, &work, delay); 
+	}
+
     list_add(&reg_pcb->list, &pcb_task_list);
     mutex_unlock(&pcb_list_mutex);
 }
 
-void deregister_task(char *kbuf) {
+void deregister_task(char *kbuf)
+ {
 	struct pcb *pos, *next; 
 	unsigned int pid; 
 
@@ -118,7 +133,13 @@ void deregister_task(char *kbuf) {
 			break; 
 		}
 	}
+
+	if(list_empty(&pcb_task_list)) {
+		flush_workqueue(workqueue); 
+	}
+
 	mutex_unlock(&pcb_list_mutex); 
+
 }
 
 
@@ -127,6 +148,7 @@ static const struct proc_ops mp3_ops =
 	.proc_open = simple_open,
 	.proc_read = read_handler,
 	.proc_write = write_handler,
+
 };
 
 
@@ -151,6 +173,8 @@ int __init rts_init(void)
 
 	pcb_slab = kmem_cache_create("pcb_slab_allocator", sizeof(struct pcb), 0, SLAB_HWCACHE_ALIGN, NULL); 
 
+	workqueue = create_workqueue("wq"); 
+
 
 	printk(KERN_ALERT "RTS MODULE LOADED\n");
 	return 0;
@@ -164,6 +188,7 @@ void __exit rts_exit(void)
 	printk(KERN_ALERT "RTS MODULE UNLOADING\n");
 #endif
 	// Insert your code here ...
+	destroy_workqueue(workqueue);
 
 	mutex_destroy(&pcb_list_mutex);
 
