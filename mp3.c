@@ -24,6 +24,9 @@ MODULE_DESCRIPTION("CS-423 MP3");
 
 #define REGISTER 'R'
 #define DEREGISTER 'D'
+#define NUM_PAGES 128
+#define PAGE_SIZE 4096
+#define DELAY_PERIOD 50 // period  = (1 second )/20 = 0.05 seconds = 50 milliseconds
 
 static struct proc_dir_entry *proc_dir, *proc_entry; 
 
@@ -36,7 +39,14 @@ struct pcb {
 	struct task_struct *linux_task;
 	struct list_head list;
 	pid_t pid;
+	unsigned long *min_flt; 
+	unsigned long *maj_flt;
+	unsigned long *utime; 
+	unsigned long *stime; 
 };
+
+unsigned long *mem_buffer;
+int index = 0;
 
 static struct workqueue_struck *workqueue;
 static void wq_fn(struct work_struct *work); 
@@ -46,11 +56,39 @@ unsigned long delay;
 void register_task(char *kbuf);
 void deregister_task(char *kbuf);
 //----------------------------------------------------------------
-
 #define DEBUG 1
 //------------------------------------------------------------------
 static void  wq_fn(struct work_struct *work) {
 	return; 
+
+	//iterate over the list, call get_cpu_time() for all the active processes
+	struct pcb *pos,*next; 
+	unsigned long *min_flt_count = 0; 
+	unsigned long *maj_flt_count = 0; 
+	unsigned long *cpu_utilization = 0; 
+
+	mutex_lock();
+	list_for_each_entry_safe(pos, next, &pcb_task_list, &list) {
+		if(get_cpu_time(pos->pid, pos->min_flt, pos->maj_flt, pos->utime, pos->stime) == 0) {
+			
+			min_flt_count += pos->min_flt; 
+			maj_flt_count += pos->maj_flt;
+			cpu_utilization += pos->utime + pos->stime;
+
+		}
+		else {
+			continue; 
+		}
+	}
+	mutex_unlock();
+
+	mem_buffer[index++] = jiffies; 
+	mem_buffer[index++] = min_flt_count;
+	mem_buffer[index++] = maj_flt_count; 
+	mem_buffer[index++] = cpu_utilization;
+
+	queue_delayed_work(workqueue, &work, delay);
+
 }
 
 static ssize_t read_handler(struct file *file, char __user *ubuf, size_t count, loff_t *ppos) 
@@ -76,11 +114,11 @@ static ssize_t write_handler(struct file *file, const char __user *ubuf, size_t 
 
     kbuffer[count] = '\0';  // Null-terminate the string
 
-	if(kbuffer[0] == 'R') {
+	if(kbuffer[0] == REGISTER) {
 		register_task(kbuffer);
 	}
 
-	else if(kbuffer[0] == 'U') {
+	else if(kbuffer[0] == DEREGISTER) {
 		deregister_task(kbuffer);
 	}
 
@@ -105,6 +143,11 @@ void register_task(char *kbuf)
 	printk(KERN_ALERT "reg_pcb_pid : %d\n", reg_pcb->pid); 
 
 	reg_pcb->linux_task = find_task_by_pid(reg_pcb->pid);
+
+	reg_pcb->min_flt = 0; 
+	reg_pcb->maj_flt = 0;
+	reg_pcb->utime = 0; 
+	reg_pcb->stime = 0;
 
     mutex_lock(&pcb_list_mutex);
 	// if list empty then 
@@ -173,8 +216,15 @@ int __init rts_init(void)
 
 	pcb_slab = kmem_cache_create("pcb_slab_allocator", sizeof(struct pcb), 0, SLAB_HWCACHE_ALIGN, NULL); 
 
-	workqueue = create_workqueue("wq"); 
+	mem_buffer = (unsigned long *)vmalloc(NUM_PAGES*PAGE_SIZE); 
 
+	if(!mem_buffer) {
+		printk(KERN_ERR "Vmalloc initialization failed");
+	}
+
+	delay = msecs_to_jiffies(DELAY_PERIOD); 
+
+	workqueue = create_workqueue("wq"); 
 
 	printk(KERN_ALERT "RTS MODULE LOADED\n");
 	return 0;
@@ -198,6 +248,8 @@ void __exit rts_exit(void)
 	}
 
 	kmem_cache_destroy(pcb_slab);
+
+	vfree(mem_buffer)
 
 	remove_proc_entry("status", proc_dir);
 	printk(KERN_WARNING "status removed....\n");
