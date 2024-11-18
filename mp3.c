@@ -54,8 +54,9 @@ unsigned long *mem_buffer;
 unsigned long idx = 0;
 
 static struct workqueue_struck *wq;
-static void wq_fn(struct work_struct *work); 
 static DECLARE_DELAYED_WORK(work, wq_fn); 
+static void wq_fn(struct work_struct *work); 
+
 unsigned long delay; 
 
 static dev_t mp3_dev;
