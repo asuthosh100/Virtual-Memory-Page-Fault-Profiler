@@ -141,7 +141,7 @@ static ssize_t write_handler(struct file *file, const char __user *ubuf, size_t 
 // vma contains the information about the virtual address range that is used to access the device
 // https://elixir.bootlin.com/linux/v5.15.127/source/drivers/video/fbdev/smscufx.c#L796
 
-int (*mmap) (struct file *filp, struct vm_area_struct *vma) {
+int mmap (struct file *filp, struct vm_area_struct *vma) {
 
    //map the the physical pages of the buffer to the virtual address spave of the requested process
    //vmalloc_to_pfn(addr) : get the physical page addr of a virtual page of the buffer. 
