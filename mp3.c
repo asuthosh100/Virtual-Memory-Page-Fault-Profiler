@@ -46,7 +46,7 @@ struct pcb {
 };
 
 unsigned long *mem_buffer;
-int index = 0;
+int index= 0;
 
 static struct workqueue_struck *workqueue;
 static void wq_fn(struct work_struct *work); 
@@ -71,7 +71,7 @@ static void  wq_fn(struct work_struct *work) {
 	unsigned long *cpu_utilization = 0; 
 
 	mutex_lock(&pcb_list_mutex);
-	list_for_each_entry_safe(pos, next, &pcb_task_list, &list) {
+	list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
 		if(get_cpu_time(pos->pid, pos->min_flt, pos->maj_flt, pos->utime, pos->stime) == 0) {
 			
 			min_flt_count += pos->min_flt; 
