@@ -70,7 +70,7 @@ static void  wq_fn(struct work_struct *work) {
 	unsigned long *maj_flt_count = 0; 
 	unsigned long *cpu_utilization = 0; 
 
-	mutex_lock();
+	mutex_lock(pcb_list_mutex);
 	list_for_each_entry_safe(pos, next, &pcb_task_list, &list) {
 		if(get_cpu_time(pos->pid, pos->min_flt, pos->maj_flt, pos->utime, pos->stime) == 0) {
 			
@@ -83,7 +83,7 @@ static void  wq_fn(struct work_struct *work) {
 			continue; 
 		}
 	}
-	mutex_unlock();
+	mutex_unlock(pcb_list_mutex);
 
 	mem_buffer[index++] = jiffies; 
 	mem_buffer[index++] = min_flt_count;
