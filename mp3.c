@@ -51,7 +51,7 @@ struct pcb {
 };
 
 unsigned long *mem_buffer;
-int index= 0;
+unsigned long index = 0;
 
 static struct workqueue_struck *workqueue;
 static void wq_fn(struct work_struct *work); 
