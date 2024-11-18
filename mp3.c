@@ -14,6 +14,9 @@
 #include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/jiffies.h>  
+#include <linux/kdev_t.h>
+#include <linux/list.h>
+#include <linux/device.h>
 #include "mp3_given.h"
 
 // !!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!
