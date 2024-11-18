@@ -52,6 +52,9 @@ static struct workqueue_struck *workqueue;
 static void wq_fn(struct work_struct *work); 
 static DECLARE_DELAYED_WORK(work, wq_fn); 
 unsigned long delay; 
+
+static dev_t mp3_dev;
+static struct cdev mp3_cdev;
 //-----------------------------------------------------------------
 void register_task(char *kbuf);
 void deregister_task(char *kbuf);
@@ -127,6 +130,46 @@ static ssize_t write_handler(struct file *file, const char __user *ubuf, size_t 
 
 }
 
+//Flip argument is a pointer to a struct file object that represents the open file associated with the mmap operation 
+// vma contains the information about the virtual address range that is used to access the device
+// https://elixir.bootlin.com/linux/v5.15.127/source/drivers/video/fbdev/smscufx.c#L796
+
+int (*mmap) (struct file *filp, struct vm_area_struct *vma) {
+
+   //map the the physical pages of the buffer to the virtual address spave of the requested process
+   //vmalloc_to_pfn(addr) : get the physical page addr of a virtual page of the buffer. 
+   // remap_pfn_range() is used to map a virtual page of a user process to a physical page (which is obtained by the previous function).
+   
+   unsigned long start = vma->vma_start; 
+   unsigned long size = vma->vm_end - vma->vm_start; 
+   unsigned long page; 
+
+   char *mem_buf = (char*)mem_buffer; 
+
+   while(size > 0) {
+
+      page = vmalloc_to_pfn(mem_buf);
+
+      if (remap_pfn_range(vma, start, page, PAGE_SIZE, PAGE_SHARED)){
+			return -EAGAIN;
+      }
+      start += PAGE_SIZE; 
+
+      mem_buf += PAGE_SIZE; 
+
+      if(size > PAGE_SIZE){
+         size -= PAGE_SIZE
+      }
+
+      else {
+         size = 0; 
+      }
+
+   }
+   return 0;
+
+}
+
 void register_task(char *kbuf) 
 {
 	struct pcb *reg_pcb = kmem_cache_alloc(pcb_slab, GFP_KERNEL); 
@@ -194,6 +237,15 @@ static const struct proc_ops mp3_ops =
 
 };
 
+static const struct proc_ops mmap_ops = 
+{
+	.proc_open = NULL,
+	.proc_mmap = mp3_mmap,
+	.proc_close = NULL,
+
+};
+
+
 
 // mp3_init - Called when module is loaded
 int __init rts_init(void)
@@ -226,8 +278,22 @@ int __init rts_init(void)
 
 	workqueue = create_workqueue("wq"); 
 
+   //register the device using register_chrdev_region()
+    /*Creating cdev structure*/
+
+    alloc_chrdev_region(&mp3_dev, 0, 1, DEV_NAME); 
+    cdev_init(&mp3_cdev,&mmap_ops);
+
+    /*Adding character device to the system*/
+    if((cdev_add(&mp3_cdev,mp3_dev,1)) < 0){
+        pr_err("Cannot add the device to the system\n");
+        //goto r_class;
+    }
+    
+
 	printk(KERN_ALERT "RTS MODULE LOADED\n");
 	return 0;
+
 }
 
 // mp3_exit - Called when module is unloaded
@@ -249,10 +315,13 @@ void __exit rts_exit(void)
 
 	kmem_cache_destroy(pcb_slab);
 
-	vfree(mem_buffer)
+	vfree(mem_buffer);
+
+   unregister_chrdev_region(mp3_dev, 1);
 
 	remove_proc_entry("status", proc_dir);
 	printk(KERN_WARNING "status removed....\n");
+
 
 	// Remove the directory within the proc filesystem
 	remove_proc_entry("mp3", NULL);
