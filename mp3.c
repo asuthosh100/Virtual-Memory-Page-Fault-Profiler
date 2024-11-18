@@ -77,7 +77,7 @@ static void  wq_fn(struct work_struct *work) {
 
 	mutex_lock(&pcb_list_mutex);
 	list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
-		if(get_cpu_use(pos->pid, pos->min_flt, pos->maj_flt, pos->utime, pos->stime) == 0) {
+		if(get_cpu_use(pos->pid, &pos->min_flt, &pos->maj_flt, &pos->utime, &pos->stime) == 0) {
 			
 			min_flt_count += pos->min_flt; 
 			maj_flt_count += pos->maj_flt;
