@@ -44,10 +44,10 @@ struct pcb {
 	struct task_struct *linux_task;
 	struct list_head list;
 	pid_t pid;
-	unsigned long *min_flt; 
-	unsigned long *maj_flt;
-	unsigned long *utime; 
-	unsigned long *stime; 
+	unsigned long min_flt; 
+	unsigned long maj_flt;
+	unsigned long utime; 
+	unsigned long stime; 
 };
 
 unsigned long *mem_buffer;
@@ -71,9 +71,9 @@ static void  wq_fn(struct work_struct *work) {
 
 	//iterate over the list, call get_cpu_time() for all the active processes
 	struct pcb *pos,*next; 
-	unsigned long *min_flt_count = 0; 
-	unsigned long *maj_flt_count = 0; 
-	unsigned long *cpu_utilization = 0; 
+	unsigned long min_flt_count = 0; 
+	unsigned long maj_flt_count = 0; 
+	unsigned long cpu_utilization = 0; 
 
 	mutex_lock(&pcb_list_mutex);
 	list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
