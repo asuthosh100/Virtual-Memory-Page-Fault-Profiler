@@ -165,7 +165,7 @@ int mmap (struct file *filp, struct vm_area_struct *vma) {
       mem_buf += PAGE_SIZE; 
 
       if(size > PAGE_SIZE){
-         size -= PAGE_SIZE
+         size -= PAGE_SIZE;
       }
 
       else {
