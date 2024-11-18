@@ -53,7 +53,7 @@ struct pcb {
 unsigned long *mem_buffer;
 unsigned long idx = 0;
 
-static struct workqueue_struck *wq;
+static struct workqueue_struct *wq;
 static void wq_fn(struct work_struct *work); 
 static DECLARE_DELAYED_WORK(mp3_work, wq_fn); 
 
