@@ -53,7 +53,7 @@ struct pcb {
 unsigned long *mem_buffer;
 unsigned long index = 0;
 
-static struct workqueue_struck *workqueue;
+static struct workqueue_struck *wq;
 static void wq_fn(struct work_struct *work); 
 static DECLARE_DELAYED_WORK(work, wq_fn); 
 unsigned long delay; 
@@ -95,7 +95,7 @@ static void  wq_fn(struct work_struct *work) {
 	mem_buffer[index++] = maj_flt_count; 
 	mem_buffer[index++] = cpu_utilization;
 
-	queue_delayed_work(workqueue, &work, delay);
+	queue_delayed_work(wq, &work, delay);
 
 }
 
@@ -200,7 +200,7 @@ void register_task(char *kbuf)
     mutex_lock(&pcb_list_mutex);
 	// if list empty then 
 	if(list_empty(&pcb_task_list)) {
-		queue_delayed_work(workqueue, &work, delay); 
+		queue_delayed_work(wq, &work, delay); 
 	}
 
     list_add(&reg_pcb->list, &pcb_task_list);
@@ -226,7 +226,7 @@ void deregister_task(char *kbuf)
 	}
 
 	if(list_empty(&pcb_task_list)) {
-		flush_workqueue(workqueue); 
+		flush_workqueue(wq); 
 	}
 
 	mutex_unlock(&pcb_list_mutex); 
@@ -281,7 +281,7 @@ int __init rts_init(void)
 
 	delay = msecs_to_jiffies(DELAY_PERIOD); 
 
-	workqueue = create_workqueue("wq"); 
+	wq = create_workqueue("wq"); 
 
    //register the device using register_chrdev_region()
     /*Creating cdev structure*/
@@ -309,7 +309,7 @@ void __exit rts_exit(void)
 	printk(KERN_ALERT "RTS MODULE UNLOADING\n");
 #endif
 	// Insert your code here ...
-	destroy_workqueue(workqueue);
+	destroy_workqueue(wq);
 
 	mutex_destroy(&pcb_list_mutex);
 
