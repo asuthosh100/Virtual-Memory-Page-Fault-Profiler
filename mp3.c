@@ -246,9 +246,9 @@ static const struct proc_ops mp3_ops =
 
 static const struct proc_ops mmap_ops = 
 {
-	.proc_open = NULL,
+	.proc_open = simple_open,
 	.proc_mmap = mmap,
-	.proc_close = NULL,
+	.proc_close = simple_close,
 
 };
 
