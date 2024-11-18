@@ -287,7 +287,7 @@ int __init rts_init(void)
    //register the device using register_chrdev_region()
     /*Creating cdev structure*/
 
-    alloc_chrdev_region(&mp3_dev, 0, 1, DEV_NAME); 
+    alloc_chrdev_region(&mp3_dev, 0, 1, "mp3_dev"); 
     cdev_init(&mp3_cdev,&mmap_ops);
 
     /*Adding character device to the system*/
