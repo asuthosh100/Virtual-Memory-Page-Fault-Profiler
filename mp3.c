@@ -147,7 +147,7 @@ int mmap (struct file *filp, struct vm_area_struct *vma) {
    //vmalloc_to_pfn(addr) : get the physical page addr of a virtual page of the buffer. 
    // remap_pfn_range() is used to map a virtual page of a user process to a physical page (which is obtained by the previous function).
    
-   unsigned long start = vma->vma_start; 
+   unsigned long start = vma->vm_start; 
    unsigned long size = vma->vm_end - vma->vm_start; 
    unsigned long page; 
 
