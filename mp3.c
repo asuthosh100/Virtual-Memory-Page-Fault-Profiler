@@ -30,7 +30,7 @@ MODULE_DESCRIPTION("CS-423 MP3");
 #define REGISTER 'R'
 #define DEREGISTER 'D'
 #define NUM_PAGES 128
-#define PAGE_SIZE 4096
+//#define PAGE_SIZE 4096
 #define DELAY_PERIOD 50 // period  = (1 second )/20 = 0.05 seconds = 50 milliseconds
 
 static struct proc_dir_entry *proc_dir, *proc_entry; 
@@ -51,7 +51,7 @@ struct pcb {
 };
 
 unsigned long *mem_buffer;
-unsigned long index = 0;
+unsigned long idx = 0;
 
 static struct workqueue_struck *wq;
 static void wq_fn(struct work_struct *work); 
@@ -90,10 +90,10 @@ static void  wq_fn(struct work_struct *work) {
 	}
 	mutex_unlock(&pcb_list_mutex);
 
-	mem_buffer[index++] = jiffies; 
-	mem_buffer[index++] = min_flt_count;
-	mem_buffer[index++] = maj_flt_count; 
-	mem_buffer[index++] = cpu_utilization;
+	mem_buffer[idx++] = jiffies; 
+	mem_buffer[idx++] = min_flt_count;
+	mem_buffer[idx++] = maj_flt_count; 
+	mem_buffer[idx++] = cpu_utilization;
 
 	queue_delayed_work(wq, &work, delay);
 
