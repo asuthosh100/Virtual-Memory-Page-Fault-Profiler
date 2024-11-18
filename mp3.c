@@ -248,7 +248,6 @@ static const struct proc_ops mmap_ops =
 {
 	.proc_open = simple_open,
 	.proc_mmap = mmap,
-	.proc_close = simple_close,
 
 };
 
