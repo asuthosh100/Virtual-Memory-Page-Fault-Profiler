@@ -54,8 +54,9 @@ unsigned long *mem_buffer;
 unsigned long idx = 0;
 
 static struct workqueue_struck *wq;
-static DECLARE_DELAYED_WORK(work, wq_fn); 
 static void wq_fn(struct work_struct *work); 
+static DECLARE_DELAYED_WORK(mp3_work, wq_fn); 
+
 
 unsigned long delay; 
 
@@ -67,7 +68,7 @@ void deregister_task(char *kbuf);
 //----------------------------------------------------------------
 #define DEBUG 1
 //------------------------------------------------------------------
-static void  wq_fn(struct work_struct *work) {
+static void wq_fn(struct work_struct *work) {
 	return; 
 
 	//iterate over the list, call get_cpu_time() for all the active processes
@@ -96,7 +97,7 @@ static void  wq_fn(struct work_struct *work) {
 	mem_buffer[idx++] = maj_flt_count; 
 	mem_buffer[idx++] = cpu_utilization;
 
-	queue_delayed_work(wq, &work, delay);
+	queue_delayed_work(wq, &mp3_work, delay);
 
 }
 
@@ -201,7 +202,7 @@ void register_task(char *kbuf)
     mutex_lock(&pcb_list_mutex);
 	// if list empty then 
 	if(list_empty(&pcb_task_list)) {
-		queue_delayed_work(wq, &work, delay); 
+		queue_delayed_work(wq, &mp3_work, delay); 
 	}
 
     list_add(&reg_pcb->list, &pcb_task_list);
