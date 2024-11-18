@@ -19,6 +19,7 @@
 #include <linux/device.h>
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
+#include <linux/cdev.h>
 #include "mp3_given.h"
 
 // !!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!
