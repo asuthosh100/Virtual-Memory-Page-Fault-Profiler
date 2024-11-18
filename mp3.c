@@ -17,6 +17,8 @@
 #include <linux/kdev_t.h>
 #include <linux/list.h>
 #include <linux/device.h>
+#include <linux/mm.h>
+#include <linux/vmalloc.h>
 #include "mp3_given.h"
 
 // !!!!!!!!!!!!! IMPORTANT !!!!!!!!!!!!!
