@@ -103,9 +103,63 @@ void deregister_task(char *kbuf);
 // }
 
 static ssize_t read_handler(struct file *file, char __user *ubuf, size_t count, loff_t *ppos) 
-{
-	printk( KERN_DEBUG "read handler\n");
-	return 0;
+{	
+	//printk(KERN_ALERT "read_handler"); 
+
+	struct pcb *p; 
+	char *kbuf; 
+	int len = 0; 
+	//ssize_t ret = len; 
+	//unsigned long flags; 
+
+	kbuf = (char *)kmalloc(count, GFP_KERNEL); 
+
+	if(!kbuf) {
+		return -ENOMEM;
+	}
+
+	// traverse over the list and read the current cpu time of the pid.  
+	
+	mutex_lock(&pcb_list_mutex);
+	list_for_each_entry(p, &pcb_task_list, list) {
+		len += sprintf(kbuf + len, "%u\n", p->pid_ts);
+		//printk(KERN_INFO "PID:%d and READ_TIME:%lu\n", p->pid, p->cpu_time);
+		if(len > count) {
+	        len = count;
+	        break;
+	  }
+	}
+	mutex_unlock(&pcb_list_mutex); 
+	
+	//printk(KERN_ALERT "Kbuf value in Read handler: %s", kbuf);
+
+	
+	//checks bounds of len
+	if(len > count) {
+	  	len = count;
+	}
+  
+    if (len < count) {
+	  kbuf[len] = '\0';
+	}
+
+	if(*ppos >= len) {
+		kfree(kbuf);
+		return 0;
+    }
+    // send it to user buffer
+    if (copy_to_user(ubuf, kbuf, len)) {
+		kfree(kbuf);
+    	return -EFAULT;
+	}
+    
+	//update *ppos according to len
+    *ppos += len;
+	kfree(kbuf);
+
+	// return bytes read
+	return len;
+
 }
 
 static ssize_t write_handler(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) 
