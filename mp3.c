@@ -29,7 +29,7 @@ MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("CS-423 MP3");
 
 #define REGISTER 'R'
-#define DEREGISTER 'D'
+#define DEREGISTER 'U'
 #define NUM_PAGES 128
 //#define PAGE_SIZE 4096
 #define DELAY_PERIOD 50 // period  = (1 second )/20 = 0.05 seconds = 50 milliseconds
@@ -51,56 +51,56 @@ struct pcb {
 	unsigned long stime; 
 };
 
-unsigned long *mem_buffer;
-unsigned long idx = 0;
+//unsigned long *mem_buffer;
+//unsigned long idx = 0;
 
-static struct workqueue_struct *wq;
-static void wq_fn(struct work_struct *work); 
-static DECLARE_DELAYED_WORK(mp3_work, wq_fn); 
+// static struct workqueue_struct *wq;
+// static void wq_fn(struct work_struct *work); 
+// static DECLARE_DELAYED_WORK(mp3_work, wq_fn); 
 
 
-unsigned long delay; 
+// unsigned long delay; 
 
-static dev_t mp3_dev;
-static struct cdev mp3_cdev;
+// static dev_t mp3_dev;
+// static struct cdev mp3_cdev;
 //-----------------------------------------------------------------
 void register_task(char *kbuf);
 void deregister_task(char *kbuf);
 //----------------------------------------------------------------
 #define DEBUG 1
 //------------------------------------------------------------------
-static void wq_fn(struct work_struct *work) {
-	return; 
+// static void wq_fn(struct work_struct *work) {
+// 	return; 
 
-	//iterate over the list, call get_cpu_time() for all the active processes
-	struct pcb *pos,*next; 
-	unsigned long min_flt_count = 0; 
-	unsigned long maj_flt_count = 0; 
-	unsigned long cpu_utilization = 0; 
+// 	//iterate over the list, call get_cpu_time() for all the active processes
+// 	struct pcb *pos,*next; 
+// 	unsigned long min_flt_count = 0; 
+// 	unsigned long maj_flt_count = 0; 
+// 	unsigned long cpu_utilization = 0; 
 
-	mutex_lock(&pcb_list_mutex);
-	list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
-		if(get_cpu_use(pos->pid, &pos->min_flt, &pos->maj_flt, &pos->utime, &pos->stime) == 0) {
+// 	mutex_lock(&pcb_list_mutex);
+// 	list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
+// 		if(get_cpu_use(pos->pid, &pos->min_flt, &pos->maj_flt, &pos->utime, &pos->stime) == 0) {
 			
-			min_flt_count += pos->min_flt; 
-			maj_flt_count += pos->maj_flt;
-			cpu_utilization += pos->utime + pos->stime;
+// 			min_flt_count += pos->min_flt; 
+// 			maj_flt_count += pos->maj_flt;
+// 			cpu_utilization += pos->utime + pos->stime;
 
-		}
-		else {
-			continue; 
-		}
-	}
-	mutex_unlock(&pcb_list_mutex);
+// 		}
+// 		else {
+// 			continue; 
+// 		}
+// 	}
+// 	mutex_unlock(&pcb_list_mutex);
 
-	mem_buffer[idx++] = jiffies; 
-	mem_buffer[idx++] = min_flt_count;
-	mem_buffer[idx++] = maj_flt_count; 
-	mem_buffer[idx++] = cpu_utilization;
+// 	mem_buffer[idx++] = jiffies; 
+// 	mem_buffer[idx++] = min_flt_count;
+// 	mem_buffer[idx++] = maj_flt_count; 
+// 	mem_buffer[idx++] = cpu_utilization;
 
-	queue_delayed_work(wq, &mp3_work, delay);
+// 	queue_delayed_work(wq, &mp3_work, delay);
 
-}
+// }
 
 static ssize_t read_handler(struct file *file, char __user *ubuf, size_t count, loff_t *ppos) 
 {
@@ -142,41 +142,41 @@ static ssize_t write_handler(struct file *file, const char __user *ubuf, size_t 
 // vma contains the information about the virtual address range that is used to access the device
 // https://elixir.bootlin.com/linux/v5.15.127/source/drivers/video/fbdev/smscufx.c#L796
 
-int mmap (struct file *filp, struct vm_area_struct *vma) {
+// int mmap (struct file *filp, struct vm_area_struct *vma) {
 
-   //map the the physical pages of the buffer to the virtual address spave of the requested process
-   //vmalloc_to_pfn(addr) : get the physical page addr of a virtual page of the buffer. 
-   // remap_pfn_range() is used to map a virtual page of a user process to a physical page (which is obtained by the previous function).
+//    //map the the physical pages of the buffer to the virtual address spave of the requested process
+//    //vmalloc_to_pfn(addr) : get the physical page addr of a virtual page of the buffer. 
+//    // remap_pfn_range() is used to map a virtual page of a user process to a physical page (which is obtained by the previous function).
    
-   unsigned long start = vma->vm_start; 
-   unsigned long size = vma->vm_end - vma->vm_start; 
-   unsigned long page; 
+//    unsigned long start = vma->vm_start; 
+//    unsigned long size = vma->vm_end - vma->vm_start; 
+//    unsigned long page; 
 
-   char *mem_buf = (char*)mem_buffer; 
+//    char *mem_buf = (char*)mem_buffer; 
 
-   while(size > 0) {
+//    while(size > 0) {
 
-      page = vmalloc_to_pfn(mem_buf);
+//       page = vmalloc_to_pfn(mem_buf);
 
-      if (remap_pfn_range(vma, start, page, PAGE_SIZE, PAGE_SHARED)){
-			return -EAGAIN;
-      }
-      start += PAGE_SIZE; 
+//       if (remap_pfn_range(vma, start, page, PAGE_SIZE, PAGE_SHARED)){
+// 			return -EAGAIN;
+//       }
+//       start += PAGE_SIZE; 
 
-      mem_buf += PAGE_SIZE; 
+//       mem_buf += PAGE_SIZE; 
 
-      if(size > PAGE_SIZE){
-         size -= PAGE_SIZE;
-      }
+//       if(size > PAGE_SIZE){
+//          size -= PAGE_SIZE;
+//       }
 
-      else {
-         size = 0; 
-      }
+//       else {
+//          size = 0; 
+//       }
 
-   }
-   return 0;
+//    }
+//    return 0;
 
-}
+// }
 
 void register_task(char *kbuf) 
 {
@@ -202,9 +202,9 @@ void register_task(char *kbuf)
 
     mutex_lock(&pcb_list_mutex);
 	// if list empty then 
-	if(list_empty(&pcb_task_list)) {
-		queue_delayed_work(wq, &mp3_work, delay); 
-	}
+	// if(list_empty(&pcb_task_list)) {
+	// 	queue_delayed_work(wq, &mp3_work, delay); 
+	// }
 
     list_add(&reg_pcb->list, &pcb_task_list);
     mutex_unlock(&pcb_list_mutex);
@@ -212,8 +212,11 @@ void register_task(char *kbuf)
 
 void deregister_task(char *kbuf)
  {
+	
 	struct pcb *pos, *next; 
 	unsigned int pid; 
+
+	printk(KERN_ALERT "Deregister Kernel Space/n");
 
 	sscanf(kbuf, "U %u", &pid); 
 
@@ -228,9 +231,9 @@ void deregister_task(char *kbuf)
 		}
 	}
 
-	if(list_empty(&pcb_task_list)) {
-		flush_workqueue(wq); 
-	}
+	// if(list_empty(&pcb_task_list)) {
+	// 	flush_workqueue(wq); 
+	// }
 
 	mutex_unlock(&pcb_list_mutex); 
 
@@ -245,12 +248,12 @@ static const struct proc_ops mp3_ops =
 
 };
 
-static const struct file_operations mmap_ops = 
-{
-	.open = simple_open,
-	.mmap = mmap,
+// static const struct file_operations mmap_ops = 
+// {
+// 	.open = simple_open,
+// 	.mmap = mmap,
 
-};
+// };
 
 
 
@@ -275,27 +278,27 @@ int __init rts_init(void)
 
 	pcb_slab = kmem_cache_create("pcb_slab_allocator", sizeof(struct pcb), 0, SLAB_HWCACHE_ALIGN, NULL); 
 
-	mem_buffer = (unsigned long *)vmalloc(NUM_PAGES*PAGE_SIZE); 
+	// mem_buffer = (unsigned long *)vmalloc(NUM_PAGES*PAGE_SIZE); 
 
-	if(!mem_buffer) {
-		printk(KERN_ERR "Vmalloc initialization failed");
-	}
+	// if(!mem_buffer) {
+	// 	printk(KERN_ERR "Vmalloc initialization failed");
+	// }
 
-	delay = msecs_to_jiffies(DELAY_PERIOD); 
+	//delay = msecs_to_jiffies(DELAY_PERIOD); 
 
-	wq = create_workqueue("wq"); 
+	//wq = create_workqueue("wq"); 
 
    //register the device using register_chrdev_region()
     /*Creating cdev structure*/
 
-    alloc_chrdev_region(&mp3_dev, 0, 1, "mp3_dev"); 
-    cdev_init(&mp3_cdev,&mmap_ops);
+    // alloc_chrdev_region(&mp3_dev, 0, 1, "mp3_dev"); 
+    // cdev_init(&mp3_cdev,&mmap_ops);
 
-    /*Adding character device to the system*/
-    if((cdev_add(&mp3_cdev,mp3_dev,1)) < 0){
-        pr_err("Cannot add the device to the system\n");
-        //goto r_class;
-    }
+    // /*Adding character device to the system*/
+    // if((cdev_add(&mp3_cdev,mp3_dev,1)) < 0){
+    //     pr_err("Cannot add the device to the system\n");
+    //     //goto r_class;
+    // }
     
 
 	printk(KERN_ALERT "RTS MODULE LOADED\n");
@@ -311,7 +314,8 @@ void __exit rts_exit(void)
 	printk(KERN_ALERT "RTS MODULE UNLOADING\n");
 #endif
 	// Insert your code here ...
-	destroy_workqueue(wq);
+
+	//destroy_workqueue(wq);
 
 	mutex_destroy(&pcb_list_mutex);
 
@@ -322,9 +326,9 @@ void __exit rts_exit(void)
 
 	kmem_cache_destroy(pcb_slab);
 
-	vfree(mem_buffer);
+// 	vfree(mem_buffer);
 
-   unregister_chrdev_region(mp3_dev, 1);
+//    unregister_chrdev_region(mp3_dev, 1);
 
 	remove_proc_entry("status", proc_dir);
 	printk(KERN_WARNING "status removed....\n");
