@@ -62,8 +62,8 @@ static DECLARE_DELAYED_WORK(mp3_work, wq_fn);
 
 unsigned long delay; 
 
-// static dev_t mp3_dev;
-// static struct cdev mp3_cdev;
+static dev_t mp3_dev;
+static struct cdev mp3_cdev;
 //-----------------------------------------------------------------
 void register_task(char *kbuf);
 void deregister_task(char *kbuf);
@@ -87,6 +87,8 @@ static void wq_fn(struct work_struct *work) {
 	list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
 		if(get_cpu_use(pos->pid, &pos->min_flt, &pos->maj_flt, &pos->utime, &pos->stime) == 0) {
 			
+			//printk(KERN_INFO "PID=%u, min_flt=%lu, maj_flt=%lu, utime=%lu, stime=%lu\n",pos->pid, pos->min_flt, pos->maj_flt, pos->utime, pos->stime);
+			
 			min_flt_count += pos->min_flt; 
 			maj_flt_count += pos->maj_flt;
 			cpu_utilization += pos->utime + pos->stime;
@@ -95,7 +97,10 @@ static void wq_fn(struct work_struct *work) {
 		else {
 			continue; 
 		}
+
 	}
+
+
 	mutex_unlock(&pcb_list_mutex);
 
 	mem_buffer[idx++] = jiffies; 
@@ -103,7 +108,7 @@ static void wq_fn(struct work_struct *work) {
 	mem_buffer[idx++] = maj_flt_count; 
 	mem_buffer[idx++] = cpu_utilization;
 
-	printk(KERN_INFO "mem_buffer[%lu]: jiffies=%lu, min_flt=%lu, maj_flt=%lu, cpu_util=%lu\n", idx / 4, mem_buffer[idx - 4], mem_buffer[idx - 3], mem_buffer[idx - 2], mem_buffer[idx - 1]);
+	//printk(KERN_INFO "mem_buffer[%lu]: jiffies=%lu, min_flt=%lu, maj_flt=%lu, cpu_util=%lu\n", idx / 4, mem_buffer[idx - 4], mem_buffer[idx - 3], mem_buffer[idx - 2], mem_buffer[idx - 1]);
 
 
 	if (idx + 4 > PRO_BUF_OFLO) {
@@ -114,7 +119,7 @@ static void wq_fn(struct work_struct *work) {
 	if (wq) {
         queue_delayed_work(wq, &mp3_work, delay);
 		//printk(KERN_ALERT "wq scheduled");
-		printk(KERN_INFO "Executing workqueue function at jiffies=%lu\n", jiffies);
+		//printk(KERN_INFO "Executing workqueue function at jiffies=%lu\n", jiffies);
 
     } else {
         printk(KERN_ERR "Workqueue is NULL\n");
@@ -216,41 +221,41 @@ static ssize_t write_handler(struct file *file, const char __user *ubuf, size_t 
 // vma contains the information about the virtual address range that is used to access the device
 // https://elixir.bootlin.com/linux/v5.15.127/source/drivers/video/fbdev/smscufx.c#L796
 
-// int mmap (struct file *filp, struct vm_area_struct *vma) {
+int mmap (struct file *filp, struct vm_area_struct *vma) {
 
-//    //map the the physical pages of the buffer to the virtual address spave of the requested process
-//    //vmalloc_to_pfn(addr) : get the physical page addr of a virtual page of the buffer. 
-//    // remap_pfn_range() is used to map a virtual page of a user process to a physical page (which is obtained by the previous function).
+   //map the the physical pages of the buffer to the virtual address spave of the requested process
+   //vmalloc_to_pfn(addr) : get the physical page addr of a virtual page of the buffer. 
+   // remap_pfn_range() is used to map a virtual page of a user process to a physical page (which is obtained by the previous function).
    
-//    unsigned long start = vma->vm_start; 
-//    unsigned long size = vma->vm_end - vma->vm_start; 
-//    unsigned long page; 
+   unsigned long start = vma->vm_start; 
+   unsigned long size = vma->vm_end - vma->vm_start; 
+   unsigned long page; 
 
-//    char *mem_buf = (char*)mem_buffer; 
+   char *mem_buf = (char*)mem_buffer; 
 
-//    while(size > 0) {
+   while(size > 0) {
 
-//       page = vmalloc_to_pfn(mem_buf);
+      page = vmalloc_to_pfn(mem_buf);
 
-//       if (remap_pfn_range(vma, start, page, PAGE_SIZE, PAGE_SHARED)){
-// 			return -EAGAIN;
-//       }
-//       start += PAGE_SIZE; 
+      if (remap_pfn_range(vma, start, page, PAGE_SIZE, PAGE_SHARED)){
+			return -EAGAIN;
+      }
+      start += PAGE_SIZE; 
 
-//       mem_buf += PAGE_SIZE; 
+      mem_buf += PAGE_SIZE; 
 
-//       if(size > PAGE_SIZE){
-//          size -= PAGE_SIZE;
-//       }
+      if(size > PAGE_SIZE){
+         size -= PAGE_SIZE;
+      }
 
-//       else {
-//          size = 0; 
-//       }
+      else {
+         size = 0; 
+      }
 
-//    }
-//    return 0;
+   }
+   return 0;
 
-// }
+}
 
 void register_task(char *kbuf) 
 {
@@ -326,12 +331,12 @@ static const struct proc_ops mp3_ops =
 
 };
 
-// static const struct file_operations mmap_ops = 
-// {
-// 	.open = simple_open,
-// 	.mmap = mmap,
+static const struct file_operations mmap_ops = 
+{
+	.open = simple_open,
+	.mmap = mmap,
 
-// };
+};
 
 
 
@@ -374,14 +379,14 @@ int __init rts_init(void)
    //register the device using register_chrdev_region()
     /*Creating cdev structure*/
 
-    // alloc_chrdev_region(&mp3_dev, 0, 1, "mp3_dev"); 
-    // cdev_init(&mp3_cdev,&mmap_ops);
+    alloc_chrdev_region(&mp3_dev, 0, 1, "mp3_dev"); 
+    cdev_init(&mp3_cdev,&mmap_ops);
 
     // /*Adding character device to the system*/
-    // if((cdev_add(&mp3_cdev,mp3_dev,1)) < 0){
-    //     pr_err("Cannot add the device to the system\n");
-    //     //goto r_class;
-    // }
+    if((cdev_add(&mp3_cdev,mp3_dev,1)) < 0){
+        pr_err("Cannot add the device to the system\n");
+        //goto r_class;
+    }
     
 
 	printk(KERN_ALERT "RTS MODULE LOADED\n");
@@ -417,7 +422,7 @@ void __exit rts_exit(void)
 
 	vfree(mem_buffer);
 
-//    unregister_chrdev_region(mp3_dev, 1);
+	 unregister_chrdev_region(mp3_dev, 1);
 
 	remove_proc_entry("status", proc_dir);
 	printk(KERN_WARNING "status removed....\n");
