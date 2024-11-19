@@ -33,6 +33,7 @@ MODULE_DESCRIPTION("CS-423 MP3");
 #define NUM_PAGES 128
 //#define PAGE_SIZE 4096
 #define DELAY_PERIOD 50 // period  = (1 second )/20 = 0.05 seconds = 50 milliseconds
+#define PRO_BUF_OFLO (NUM_PAGES*PAGE_SIZE/sizeof(unsigned long))
 
 static struct proc_dir_entry *proc_dir, *proc_entry; 
 
@@ -51,15 +52,15 @@ struct pcb {
 	unsigned long stime; 
 };
 
-//unsigned long *mem_buffer;
-//unsigned long idx = 0;
+unsigned long *mem_buffer;
+unsigned long idx = 0;
 
-// static struct workqueue_struct *wq;
-// static void wq_fn(struct work_struct *work); 
-// static DECLARE_DELAYED_WORK(mp3_work, wq_fn); 
+static struct workqueue_struct *wq;
+static void wq_fn(struct work_struct *work); 
+static DECLARE_DELAYED_WORK(mp3_work, wq_fn); 
 
 
-// unsigned long delay; 
+unsigned long delay; 
 
 // static dev_t mp3_dev;
 // static struct cdev mp3_cdev;
@@ -69,38 +70,57 @@ void deregister_task(char *kbuf);
 //----------------------------------------------------------------
 #define DEBUG 1
 //------------------------------------------------------------------
-// static void wq_fn(struct work_struct *work) {
-// 	return; 
+static void wq_fn(struct work_struct *work) {
 
-// 	//iterate over the list, call get_cpu_time() for all the active processes
-// 	struct pcb *pos,*next; 
-// 	unsigned long min_flt_count = 0; 
-// 	unsigned long maj_flt_count = 0; 
-// 	unsigned long cpu_utilization = 0; 
+	//iterate over the list, call get_cpu_time() for all the active processes
+	struct pcb *pos,*next; 
+	unsigned long min_flt_count = 0; 
+	unsigned long maj_flt_count = 0; 
+	unsigned long cpu_utilization = 0; 
 
-// 	mutex_lock(&pcb_list_mutex);
-// 	list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
-// 		if(get_cpu_use(pos->pid, &pos->min_flt, &pos->maj_flt, &pos->utime, &pos->stime) == 0) {
+	 if (!mem_buffer) {
+        printk(KERN_ERR "mem_buffer is NULL\n");
+        return;
+    }
+
+	mutex_lock(&pcb_list_mutex);
+	list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
+		if(get_cpu_use(pos->pid, &pos->min_flt, &pos->maj_flt, &pos->utime, &pos->stime) == 0) {
 			
-// 			min_flt_count += pos->min_flt; 
-// 			maj_flt_count += pos->maj_flt;
-// 			cpu_utilization += pos->utime + pos->stime;
+			min_flt_count += pos->min_flt; 
+			maj_flt_count += pos->maj_flt;
+			cpu_utilization += pos->utime + pos->stime;
 
-// 		}
-// 		else {
-// 			continue; 
-// 		}
-// 	}
-// 	mutex_unlock(&pcb_list_mutex);
+		}
+		else {
+			continue; 
+		}
+	}
+	mutex_unlock(&pcb_list_mutex);
 
-// 	mem_buffer[idx++] = jiffies; 
-// 	mem_buffer[idx++] = min_flt_count;
-// 	mem_buffer[idx++] = maj_flt_count; 
-// 	mem_buffer[idx++] = cpu_utilization;
+	mem_buffer[idx++] = jiffies; 
+	mem_buffer[idx++] = min_flt_count;
+	mem_buffer[idx++] = maj_flt_count; 
+	mem_buffer[idx++] = cpu_utilization;
 
-// 	queue_delayed_work(wq, &mp3_work, delay);
+	printk(KERN_INFO "mem_buffer[%lu]: jiffies=%lu, min_flt=%lu, maj_flt=%lu, cpu_util=%lu\n", idx / 4, mem_buffer[idx - 4], mem_buffer[idx - 3], mem_buffer[idx - 2], mem_buffer[idx - 1]);
 
-// }
+
+	if (idx + 4 > PRO_BUF_OFLO) {
+		printk(KERN_ERR "Index exceeds buffer capacity, resetting\n");
+		idx = 0;
+	}
+
+	if (wq) {
+        queue_delayed_work(wq, &mp3_work, delay);
+		//printk(KERN_ALERT "wq scheduled");
+		printk(KERN_INFO "Executing workqueue function at jiffies=%lu\n", jiffies);
+
+    } else {
+        printk(KERN_ERR "Workqueue is NULL\n");
+    }
+
+}
 
 static ssize_t read_handler(struct file *file, char __user *ubuf, size_t count, loff_t *ppos) 
 {	
@@ -122,7 +142,7 @@ static ssize_t read_handler(struct file *file, char __user *ubuf, size_t count, 
 	
 	mutex_lock(&pcb_list_mutex);
 	list_for_each_entry(p, &pcb_task_list, list) {
-		len += sprintf(kbuf + len, "%u\n", p->pid_ts);
+		len += sprintf(kbuf + len, "%u\n", p->pid);
 		//printk(KERN_INFO "PID:%d and READ_TIME:%lu\n", p->pid, p->cpu_time);
 		if(len > count) {
 	        len = count;
@@ -256,9 +276,13 @@ void register_task(char *kbuf)
 
     mutex_lock(&pcb_list_mutex);
 	// if list empty then 
-	// if(list_empty(&pcb_task_list)) {
-	// 	queue_delayed_work(wq, &mp3_work, delay); 
-	// }
+	if(list_empty(&pcb_task_list)) {
+
+		if (!queue_delayed_work(wq, &mp3_work, delay)) {
+    	printk(KERN_ERR "Failed to queue delayed work\n");
+		}
+
+	}
 
     list_add(&reg_pcb->list, &pcb_task_list);
     mutex_unlock(&pcb_list_mutex);
@@ -285,9 +309,9 @@ void deregister_task(char *kbuf)
 		}
 	}
 
-	// if(list_empty(&pcb_task_list)) {
-	// 	flush_workqueue(wq); 
-	// }
+	if(list_empty(&pcb_task_list)) {
+		flush_workqueue(wq); 
+	}
 
 	mutex_unlock(&pcb_list_mutex); 
 
@@ -332,15 +356,20 @@ int __init rts_init(void)
 
 	pcb_slab = kmem_cache_create("pcb_slab_allocator", sizeof(struct pcb), 0, SLAB_HWCACHE_ALIGN, NULL); 
 
-	// mem_buffer = (unsigned long *)vmalloc(NUM_PAGES*PAGE_SIZE); 
+	mem_buffer = (unsigned long *)vmalloc(NUM_PAGES*PAGE_SIZE); 
 
-	// if(!mem_buffer) {
-	// 	printk(KERN_ERR "Vmalloc initialization failed");
-	// }
+	if (!mem_buffer) {
+    printk(KERN_ERR "Failed to allocate mem_buffer\n");
+    return -ENOMEM; // Exit initialization if allocation fails
+	}
 
-	//delay = msecs_to_jiffies(DELAY_PERIOD); 
+	delay = msecs_to_jiffies(DELAY_PERIOD); 
 
-	//wq = create_workqueue("wq"); 
+	wq = create_workqueue("wq"); 
+	if (!wq) {
+    printk(KERN_ERR "Failed to create workqueue\n");
+    return -ENOMEM;
+	}
 
    //register the device using register_chrdev_region()
     /*Creating cdev structure*/
@@ -369,7 +398,13 @@ void __exit rts_exit(void)
 #endif
 	// Insert your code here ...
 
-	//destroy_workqueue(wq);
+
+	if(delayed_work_pending(&mp3_work)) {
+		cancel_delayed_work_sync(&mp3_work);
+	}
+
+	flush_workqueue(wq);
+	destroy_workqueue(wq);
 
 	mutex_destroy(&pcb_list_mutex);
 
@@ -380,7 +415,7 @@ void __exit rts_exit(void)
 
 	kmem_cache_destroy(pcb_slab);
 
-// 	vfree(mem_buffer);
+	vfree(mem_buffer);
 
 //    unregister_chrdev_region(mp3_dev, 1);
 
