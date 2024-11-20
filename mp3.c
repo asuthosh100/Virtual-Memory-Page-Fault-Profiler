@@ -38,11 +38,14 @@ MODULE_DESCRIPTION("CS-423 MP3");
 
 static struct proc_dir_entry *proc_dir, *proc_entry; 
 
+
 static LIST_HEAD(pcb_task_list);
 
 struct kmem_cache *pcb_slab;
 static DEFINE_MUTEX(pcb_list_mutex);
 
+//augment the Process Control Block (PCB). This created PCB shall include three variables to keep the process utilization (u_time and s_time), major fault count, and minor fault count of the corresponding process.
+// The pcb also includes the pid of the task
 struct pcb {
 	struct task_struct *linux_task;
 	struct list_head list;
@@ -53,11 +56,13 @@ struct pcb {
 	unsigned long stime; 
 };
 
+//A memory buffer is allocated in the kernel memory when your kernel module is initialized and is freed when the module is uninitialized. The buffer needs to be virtually contiguous, but does not have to be physically contiguous.
 unsigned long *mem_buffer;
 unsigned long idx = 0;
 
 int i = 0;
 
+// Initializations for workqueue
 static struct workqueue_struct *wq;
 static void wq_fn(struct work_struct *work); 
 static DECLARE_DELAYED_WORK(mp3_work, wq_fn); 
@@ -65,14 +70,19 @@ static DECLARE_DELAYED_WORK(mp3_work, wq_fn);
 
 unsigned long delay; 
 
+//initializations for character device driver
 static dev_t mp3_dev;
 static struct cdev mp3_cdev;
+
+//function prototype
 //-----------------------------------------------------------------
 void register_task(char *kbuf);
 void deregister_task(char *kbuf);
 //----------------------------------------------------------------
 #define DEBUG 1
 //------------------------------------------------------------------
+
+//workqueue function 
 static void wq_fn(struct work_struct *work) {
 
 	//iterate over the list, call get_cpu_time() for all the active processes
@@ -86,6 +96,8 @@ static void wq_fn(struct work_struct *work) {
         printk(KERN_ERR "mem_buffer is NULL\n");
         return;
     }
+
+    //The memory buffer is organized as a queue that saves up to 12000 (=20x600) samples. Each sample consists of four unsigned long type data: (a)jiffies value (which is the Linux kernel variable that shows the number of timer ticks executed since the kernel boot-up), (b) minor fault count, (c) major fault count, and (d) CPU utilization (s_time + u_time). The work handler only writes one sample each time. In each sample, (b), (c), and (d) are the sum of that of all the registered processes within a sampling period (1/20 seconds) 
 
 	mutex_lock(&pcb_list_mutex);
 	list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
@@ -136,6 +148,7 @@ static void wq_fn(struct work_struct *work) {
 
 }
 
+//used to read registered tasks via cat
 static ssize_t read_handler(struct file *file, char __user *ubuf, size_t count, loff_t *ppos) 
 {	
 	//printk(KERN_ALERT "read_handler"); 
@@ -195,6 +208,8 @@ static ssize_t read_handler(struct file *file, char __user *ubuf, size_t count, 
 	return len;
 
 }
+
+//he write callback function has a switch to separate each type of message (REGISTRATION, UNREGISTRATION).
 
 static ssize_t write_handler(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) 
 {	
@@ -266,6 +281,7 @@ int mmap (struct file *file, struct vm_area_struct *vma) {
 
 }
 
+//The registration function first adds the requesting process to the PCB list and calls a function that creates a work queue job if the requesting process is the first one in the PCB list.
 void register_task(char *kbuf) 
 {
 	struct pcb *reg_pcb = kmem_cache_alloc(pcb_slab, GFP_KERNEL); 
@@ -302,6 +318,7 @@ void register_task(char *kbuf)
     mutex_unlock(&pcb_list_mutex);
 }
 
+//the unregister function deletes the requesting process from the PCB list (if exists). Then, if the PCB list is empty after the delete operation, the work queue job is deleted as well.
 void deregister_task(char *kbuf)
  {
 	
