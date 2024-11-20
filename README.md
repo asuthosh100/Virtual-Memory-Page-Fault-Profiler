@@ -7,5 +7,18 @@ The project analyzes workload characteristics through synthetic user-level proce
 
 
 # ANALYSIS 
-CASE STUDY 1: ![alt text](case_1_work_1_2.png)
+CASE STUDY 1:
+
+Work process 1: 1024MB Memory, Random Access, and 50,000 accesses per iteration
+
+Work process 2: 1024MB Memory, Random Access, and 10,000 accesses per iteration
+
+ ![alt text](case_1_work_1_2.png)
+
+Work process 3: 1024MB Memory, Random Locality Access, and 50,000 accesses per iteration
+
+Work process 4: 1024MB Memory, Locality-based Access, and 10,000 accesses per iteration
+
+ ![alt text](case_1_work_3_4.png)
+
 
