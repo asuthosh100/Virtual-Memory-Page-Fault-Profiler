@@ -430,6 +430,7 @@ int __init rts_init(void)
         return ret;
     }
 
+	// source https://linux-kernel-labs.github.io/refs/heads/master/labs/memory_mapping.html
 	for (i = 0; i < NUM_PAGES; i++) {
 		SetPageReserved(vmalloc_to_page((char *)mem_buffer + i * PAGE_SIZE));
 	}
