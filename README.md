@@ -25,4 +25,8 @@ Work process 4: 1024MB Memory, Locality-based Access, and 10,000 accesses per it
 
  Graph case_1_work_3_4 uses locality-based access, leading to considerably lesser page faults, hence the completion time is shorter compared to the previous graph. 
 
+ CASE STUDY 2: 
+
+![alt text](case_2.png)
+
 
