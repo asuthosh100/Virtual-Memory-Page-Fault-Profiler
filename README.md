@@ -21,4 +21,8 @@ Work process 4: 1024MB Memory, Locality-based Access, and 10,000 accesses per it
 
  ![alt text](case_1_work_3_4.png)
 
+ Graph case_1_work_1_2 uses Random Access which leads to high page fault rate due to lack of memory locality which eventually leads to the processes taking long to complete
+
+ Graph case_1_work_3_4 uses locality-based access, leading to considerably lesser page faults, hence the completion time is shorter compared to the previous graph. 
+
 
