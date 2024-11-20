@@ -29,4 +29,8 @@ Work process 4: 1024MB Memory, Locality-based Access, and 10,000 accesses per it
 
 ![alt text](case_2.png)
 
+The above graph is a key indicator of CPU Thrashing where there is an abrust increase in resource usage, too many processes competing for limited CPU and decreased efficieny as system struggles to manage the load. 
+
+Also for the above processes I had to use different RAM, due to the proccesses being killed by OOM when N gets larger.
+
 
