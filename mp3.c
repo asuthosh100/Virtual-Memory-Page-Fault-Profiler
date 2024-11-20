@@ -33,7 +33,8 @@ MODULE_DESCRIPTION("CS-423 MP3");
 #define NUM_PAGES 128
 //#define PAGE_SIZE 4096
 #define DELAY_PERIOD 50 // period  = (1 second )/20 = 0.05 seconds = 50 milliseconds
-#define PRO_BUF_OFLO (NUM_PAGES*PAGE_SIZE/sizeof(unsigned long))
+#define PRO_BUF_OFLO 48000 //(NUM_PAGES*PAGE_SIZE/sizeof(unsigned long))
+#define BUFFER_SIZE NUM_PAGES * PAGE_SIZE
 
 static struct proc_dir_entry *proc_dir, *proc_entry; 
 
@@ -54,6 +55,8 @@ struct pcb {
 
 unsigned long *mem_buffer;
 unsigned long idx = 0;
+
+int i = 0;
 
 static struct workqueue_struct *wq;
 static void wq_fn(struct work_struct *work); 
@@ -77,6 +80,7 @@ static void wq_fn(struct work_struct *work) {
 	unsigned long min_flt_count = 0; 
 	unsigned long maj_flt_count = 0; 
 	unsigned long cpu_utilization = 0; 
+	unsigned long maj_flt, min_flt, utime, stime;
 
 	 if (!mem_buffer) {
         printk(KERN_ERR "mem_buffer is NULL\n");
@@ -85,22 +89,27 @@ static void wq_fn(struct work_struct *work) {
 
 	mutex_lock(&pcb_list_mutex);
 	list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
-		if(get_cpu_use(pos->pid, &pos->min_flt, &pos->maj_flt, &pos->utime, &pos->stime) == 0) {
+		if(get_cpu_use(pos->pid, &min_flt, &maj_flt, &utime, &stime) == 0) {
 			
-			//printk(KERN_INFO "PID=%u, min_flt=%lu, maj_flt=%lu, utime=%lu, stime=%lu\n",pos->pid, pos->min_flt, pos->maj_flt, pos->utime, pos->stime);
+			printk(KERN_DEBUG "PID=%u, min_flt=%lu, maj_flt=%lu, utime=%lu, stime=%lu\n",pos->pid, min_flt, maj_flt, utime, stime);
 			
+			pos->min_flt += min_flt;
+			pos->maj_flt += maj_flt;
+			pos->utime += utime;
+			pos->stime += stime;
+			maj_flt_count += pos->maj_flt;
+			maj_flt_count += pos->maj_flt;
 			min_flt_count += pos->min_flt; 
 			maj_flt_count += pos->maj_flt;
 			cpu_utilization += pos->utime + pos->stime;
 
 		}
 		else {
-			continue; 
+			list_del(&pos->list);
+			kfree(pos); 
 		}
 
 	}
-
-
 	mutex_unlock(&pcb_list_mutex);
 
 	mem_buffer[idx++] = jiffies; 
@@ -108,7 +117,7 @@ static void wq_fn(struct work_struct *work) {
 	mem_buffer[idx++] = maj_flt_count; 
 	mem_buffer[idx++] = cpu_utilization;
 
-	//printk(KERN_INFO "mem_buffer[%lu]: jiffies=%lu, min_flt=%lu, maj_flt=%lu, cpu_util=%lu\n", idx / 4, mem_buffer[idx - 4], mem_buffer[idx - 3], mem_buffer[idx - 2], mem_buffer[idx - 1]);
+	printk(KERN_DEBUG "mem_buffer[%lu]: jiffies=%lu, min_flt=%lu, maj_flt=%lu, cpu_util=%lu\n", idx / 4, mem_buffer[idx - 4], mem_buffer[idx - 3], mem_buffer[idx - 2], mem_buffer[idx - 1]);
 
 
 	if (idx + 4 > PRO_BUF_OFLO) {
@@ -221,7 +230,7 @@ static ssize_t write_handler(struct file *file, const char __user *ubuf, size_t 
 // vma contains the information about the virtual address range that is used to access the device
 // https://elixir.bootlin.com/linux/v5.15.127/source/drivers/video/fbdev/smscufx.c#L796
 
-int mmap (struct file *filp, struct vm_area_struct *vma) {
+int mmap (struct file *file, struct vm_area_struct *vma) {
 
    //map the the physical pages of the buffer to the virtual address spave of the requested process
    //vmalloc_to_pfn(addr) : get the physical page addr of a virtual page of the buffer. 
@@ -237,7 +246,7 @@ int mmap (struct file *filp, struct vm_area_struct *vma) {
 
       page = vmalloc_to_pfn(mem_buf);
 
-      if (remap_pfn_range(vma, start, page, PAGE_SIZE, PAGE_SHARED)){
+      if (remap_pfn_range(vma, start, page, PAGE_SIZE,vma->vm_page_prot)){
 			return -EAGAIN;
       }
       start += PAGE_SIZE; 
@@ -344,97 +353,152 @@ static const struct file_operations mmap_ops =
 int __init rts_init(void)
 {
 #ifdef DEBUG
-	printk(KERN_ALERT "RTS MODULE LOADING\n");
+    printk(KERN_ALERT "RTS MODULE LOADING\n");
 #endif
-	// Insert your code here ...
 
-	proc_dir = proc_mkdir("mp3", NULL);
-	printk(KERN_ALERT "mp3 created....\n"); 
-
-	proc_entry = proc_create("status", 0666, proc_dir, &mp3_ops);
-
-	if (!proc_entry) {
-		printk(KERN_ALERT "status creation failed....\n");
-		return -ENOMEM;
-	}
-	printk(KERN_ALERT "status created....\n");
-
-	pcb_slab = kmem_cache_create("pcb_slab_allocator", sizeof(struct pcb), 0, SLAB_HWCACHE_ALIGN, NULL); 
-
-	mem_buffer = (unsigned long *)vmalloc(NUM_PAGES*PAGE_SIZE); 
-
-	if (!mem_buffer) {
-    printk(KERN_ERR "Failed to allocate mem_buffer\n");
-    return -ENOMEM; // Exit initialization if allocation fails
-	}
-
-	delay = msecs_to_jiffies(DELAY_PERIOD); 
-
-	wq = create_workqueue("wq"); 
-	if (!wq) {
-    printk(KERN_ERR "Failed to create workqueue\n");
-    return -ENOMEM;
-	}
-
-   //register the device using register_chrdev_region()
-    /*Creating cdev structure*/
-
-    alloc_chrdev_region(&mp3_dev, 0, 1, "mp3_dev"); 
-    cdev_init(&mp3_cdev,&mmap_ops);
-
-    // /*Adding character device to the system*/
-    if((cdev_add(&mp3_cdev,mp3_dev,1)) < 0){
-        pr_err("Cannot add the device to the system\n");
-        //goto r_class;
+    // Create /proc/mp3 directory and status file
+    proc_dir = proc_mkdir("mp3", NULL);
+    if (!proc_dir) {
+        printk(KERN_ALERT "Failed to create /proc/mp3 directory\n");
+        return -ENOMEM;
     }
-    
+    printk(KERN_ALERT "mp3 directory created....\n");
 
-	printk(KERN_ALERT "RTS MODULE LOADED\n");
-	return 0;
+    proc_entry = proc_create("status", 0666, proc_dir, &mp3_ops);
+    if (!proc_entry) {
+        printk(KERN_ALERT "status creation failed....\n");
+        remove_proc_entry("mp3", NULL);
+        return -ENOMEM;
+    }
+    printk(KERN_ALERT "status created....\n");
 
+    // Create slab cache for pcb struct
+    pcb_slab = kmem_cache_create("pcb_slab_allocator", sizeof(struct pcb), 0, SLAB_HWCACHE_ALIGN, NULL);
+    if (!pcb_slab) {
+        printk(KERN_ERR "Failed to create pcb slab allocator\n");
+        remove_proc_entry("status", proc_dir);
+        remove_proc_entry("mp3", NULL);
+        return -ENOMEM;
+    }
+
+    // Allocate memory for shared buffer
+    mem_buffer = (unsigned long *)vmalloc(NUM_PAGES * PAGE_SIZE);
+    if (!mem_buffer) {
+        printk(KERN_ERR "Failed to allocate mem_buffer\n");
+        kmem_cache_destroy(pcb_slab);
+        remove_proc_entry("status", proc_dir);
+        remove_proc_entry("mp3", NULL);
+        return -ENOMEM;
+    }
+	memset(mem_buffer, -1, NUM_PAGES * PAGE_SIZE);
+
+    // Initialize workqueue
+    delay = msecs_to_jiffies(DELAY_PERIOD);
+    wq = create_workqueue("wq");
+    if (!wq) {
+        printk(KERN_ERR "Failed to create workqueue\n");
+        vfree(mem_buffer);
+        kmem_cache_destroy(pcb_slab);
+        remove_proc_entry("status", proc_dir);
+        remove_proc_entry("mp3", NULL);
+        return -ENOMEM;
+    }
+
+    // Register the character device
+    int ret;
+    ret = register_chrdev_region(MKDEV(423, 0), 1, "mp3_dev"); // Use major number 423
+    if (ret < 0) {
+        printk(KERN_ERR "Failed to register char device region\n");
+        destroy_workqueue(wq);
+        vfree(mem_buffer);
+        kmem_cache_destroy(pcb_slab);
+        remove_proc_entry("status", proc_dir);
+        remove_proc_entry("mp3", NULL);
+        return ret;
+    }
+
+    cdev_init(&mp3_cdev, &mmap_ops);
+    ret = cdev_add(&mp3_cdev, MKDEV(423, 0), 1); // Minor number is 0
+    if (ret < 0) {
+        printk(KERN_ERR "Failed to add char device\n");
+        unregister_chrdev_region(MKDEV(423, 0), 1);
+        destroy_workqueue(wq);
+        vfree(mem_buffer);
+        kmem_cache_destroy(pcb_slab);
+        remove_proc_entry("status", proc_dir);
+        remove_proc_entry("mp3", NULL);
+        return ret;
+    }
+
+	for (i = 0; i < NUM_PAGES; i++) {
+		SetPageReserved(vmalloc_to_page((char *)mem_buffer + i * PAGE_SIZE));
+	}
+
+    printk(KERN_ALERT "RTS MODULE LOADED\n");
+    return 0;
 }
+
 
 // mp3_exit - Called when module is unloaded
 void __exit rts_exit(void)
 {
-	struct pcb *pos, *next; 
-#ifdef DEBUG
-	printk(KERN_ALERT "RTS MODULE UNLOADING\n");
-#endif
-	// Insert your code here ...
+    struct pcb *pos, *next;
 
+    printk(KERN_ALERT "RTS MODULE UNLOADING\n");
 
-	if(delayed_work_pending(&mp3_work)) {
-		cancel_delayed_work_sync(&mp3_work);
-	}
+    // Cancel and destroy workqueue
+    if (wq) {
+        if (delayed_work_pending(&mp3_work)) {
+            cancel_delayed_work_sync(&mp3_work);
+        }
+        flush_workqueue(wq);
+        destroy_workqueue(wq);
+        wq = NULL;
+    }
 
-	flush_workqueue(wq);
-	destroy_workqueue(wq);
+    // Destroy mutex
+    mutex_destroy(&pcb_list_mutex);
 
-	mutex_destroy(&pcb_list_mutex);
+    // Free all tasks in the list
+    list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
+        list_del(&pos->list);
+        kmem_cache_free(pcb_slab, pos);
+    }
 
-	list_for_each_entry_safe(pos, next, &pcb_task_list, list) {
-			list_del(&pos->list);
-			kmem_cache_free(pcb_slab, pos);
-	}
+    // Destroy slab cache
+    if (pcb_slab) {
+        kmem_cache_destroy(pcb_slab);
+        pcb_slab = NULL;
+    }
 
-	kmem_cache_destroy(pcb_slab);
+    // Free and unmap memory buffer
+    if (mem_buffer) {
+        for (i = 0; i < NUM_PAGES; i++) {
+            ClearPageReserved(vmalloc_to_page((char *)mem_buffer + i * PAGE_SIZE));
+        }
+        vfree(mem_buffer);
+        mem_buffer = NULL;
+    }
 
-	vfree(mem_buffer);
+    // Remove proc entries
+    if (proc_entry) {
+        remove_proc_entry("status", proc_dir);
+        proc_entry = NULL;
+    }
+    if (proc_dir) {
+        remove_proc_entry("mp3", NULL);
+        proc_dir = NULL;
+    }
 
-	 unregister_chrdev_region(mp3_dev, 1);
+    // Cleanup character device
+    cdev_del(&mp3_cdev);
+    unregister_chrdev_region(mp3_dev, 1);
 
-	remove_proc_entry("status", proc_dir);
-	printk(KERN_WARNING "status removed....\n");
-
-
-	// Remove the directory within the proc filesystem
-	remove_proc_entry("mp3", NULL);
-	printk(KERN_WARNING "mp3 removed...\n");
-
-	printk(KERN_ALERT "RTS MODULE UNLOADED\n");
+    printk(KERN_ALERT "RTS MODULE UNLOADED\n");
 }
+
 
 // Register init and exit funtions
 module_init(rts_init);
 module_exit(rts_exit);
+

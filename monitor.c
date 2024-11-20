@@ -44,7 +44,7 @@ static void buf_exit()
 
 int main(int argc, char* argv[])
 {
-  long *buf;
+  unsigned long *buf;
   int index = 0;
   int i;
 

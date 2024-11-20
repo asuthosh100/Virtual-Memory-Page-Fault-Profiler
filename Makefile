@@ -1,5 +1,5 @@
 CFLAGS_MODULE += -Wno-declaration-after-statement -Werror
-APP_CFLAGS = -std=c11 -pipe -O2 -Werror
+APP_CFLAGS = -std=c99 -pipe -O2 -Werror
 
 KERNEL_SRC := /lib/modules/$(shell uname -r)/build
 SUBDIR := $(PWD)
