@@ -423,7 +423,8 @@ int __init rts_init(void)
 
     // Register the character device
     int ret;
-    ret = register_chrdev_region(MKDEV(423, 0), 1, "mp3_dev"); // Use major number 423
+    mp3_dev = MKDEV(423, 0);
+    ret = register_chrdev_region(mp3_dev, 1, "mp3_dev"); // Use major number 423
     if (ret < 0) {
         printk(KERN_ERR "Failed to register char device region\n");
         destroy_workqueue(wq);
